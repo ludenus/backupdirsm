@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 
 import boto3
-import json
 import sys
 import logging
 import os
 import re
 import socket
-import time
 from datetime import datetime
 from datetime import timezone
 from botocore.exceptions import ClientError
 import argparse
+import fnmatch
 
 
 # This is a placeholder and will be replaced by the version from poetry-dynamic-versioning
@@ -36,8 +35,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_iso8601_timestamp(time):
-    dt = datetime.fromtimestamp(time, timezone.utc)
-    return dt.strftime("%Y%m%dT%H%M%S%z")
+    # Create a naive datetime object in local time
+    dt = datetime.fromtimestamp(time)
+    # Make it timezone-aware by attaching the local timezone
+    dt = dt.astimezone()
+    return dt.isoformat()
 
 
 def validate_directory(path, mode="source"):
@@ -88,20 +90,28 @@ def upload_to_secrets_manager(secret_name, secret_value, description=None, tags=
                 Description=description or "",
             )
             logger.info(f"Secret updated: '{secret_name}'.")
-            client.untag_resource(
-                SecretId=secret_name, TagKeys=[tag["Key"] for tag in tags]
-            )
-            client.tag_resource(SecretId=secret_name, Tags=tags)
-            logger.info(f"Tags updated: '{secret_name}'.")
+            if tags:
+                client.untag_resource(
+                    SecretId=secret_name, TagKeys=[tag["Key"] for tag in tags]
+                )
+                client.tag_resource(SecretId=secret_name, Tags=tags)
+                logger.info(f"Tags updated: '{secret_name}'.")
         else:
             logger.error(f"Failed to store secret: {e}")
             sys.exit(21)
 
 
-def upload_directory(directory):
+def upload_directory(directory, include_pattern=None, exclude_pattern=None):
     for root, _, files in os.walk(directory, followlinks=True):
         for file_name in files:
-            file_path = os.path.join(root, file_name)
+            file_path = os.path.abspath(os.path.join(root, file_name))
+
+            # Apply include and exclude patterns
+            if include_pattern and not fnmatch.fnmatch(file_path, include_pattern):
+                continue
+            if exclude_pattern and fnmatch.fnmatch(file_path, exclude_pattern):
+                continue
+
             try:
                 with open(file_path, "r") as file:
                     file_content = file.read()
@@ -118,44 +128,57 @@ def upload_directory(directory):
                 logger.error(f"Error uploading file '{file_path}': {e}")
 
 
-def download_from_secrets_manager(destination):
+def download_from_secrets_manager(
+    destination, include_pattern=None, exclude_pattern=None
+):
     client = get_secretsmanager()
-    destination = os.path.abspath(
-        os.path.realpath(destination)
-    )  # Ensure the canonical path for destination
+    destination = os.path.abspath(os.path.realpath(destination))
     try:
-        secrets = client.list_secrets(
+        # Handle pagination for secrets
+        paginator = client.get_paginator("list_secrets")
+        page_iterator = paginator.paginate(
             Filters=[{"Key": "tag-key", "Values": ["filename"]}]
         )
-        for secret in secrets["SecretList"]:
-            # Extract filename tag
-            filename_tag = next(
-                (tag["Value"] for tag in secret["Tags"] if tag["Key"] == "filename"),
-                None,
-            )
-            if not filename_tag:
-                continue
-
-            # Check if filename path starts with the destination directory
-            if not os.path.commonpath([destination, filename_tag]).startswith(
-                destination
-            ):
-                logger.info(
-                    f"Skipping secret: '{secret['Name']}' as it does not match the destination directory '{destination}'."
+        for page in page_iterator:
+            for secret in page["SecretList"]:
+                # Extract filename tag
+                filename_tag = next(
+                    (
+                        tag["Value"]
+                        for tag in secret.get("Tags", [])
+                        if tag["Key"] == "filename"
+                    ),
+                    None,
                 )
-                continue
+                if not filename_tag:
+                    continue
 
-            # Download and save the secret
-            secret_name = secret["Name"]
-            response = client.get_secret_value(SecretId=secret_name)
-            secret_value = response["SecretString"]
-            dest_path = os.path.join(
-                destination, os.path.relpath(filename_tag, start=destination)
-            )
-            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-            with open(dest_path, "w") as file:
-                file.write(secret_value)
-            logger.info(f"Downloaded secret '{secret_name}' to '{dest_path}'.")
+                file_path = filename_tag
+
+                # Apply include and exclude patterns
+                if include_pattern and not fnmatch.fnmatch(file_path, include_pattern):
+                    continue
+                if exclude_pattern and fnmatch.fnmatch(file_path, exclude_pattern):
+                    continue
+
+                # Construct destination path
+                dest_path = os.path.abspath(file_path)
+
+                # Ensure that the destination path is within the destination directory
+                if not dest_path.startswith(destination):
+                    logger.error(
+                        f"Destination path '{dest_path}' is outside the destination directory '{destination}'. Skipping."
+                    )
+                    continue
+
+                # Download and save the secret
+                secret_name = secret["Name"]
+                response = client.get_secret_value(SecretId=secret_name)
+                secret_value = response["SecretString"]
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with open(dest_path, "w") as file:
+                    file.write(secret_value)
+                logger.info(f"Downloaded secret '{secret_name}' to '{dest_path}'.")
     except ClientError as e:
         logger.error(f"Failed to retrieve secrets: {e}")
         sys.exit(31)
@@ -178,14 +201,30 @@ def main():
         type=str,
         help="Destination directory to download from AWS Secrets Manager",
     )
+    parser.add_argument(
+        "-i",
+        "--include",
+        metavar="PATTERN",
+        help="Include only files matching the pattern",
+    )
+    parser.add_argument(
+        "-e",
+        "--exclude",
+        metavar="PATTERN",
+        help="Exclude files matching the pattern",
+    )
     args = parser.parse_args()
 
     if args.upload:
         source_path = validate_directory(args.upload, "source")
-        upload_directory(source_path)
+        upload_directory(
+            source_path, include_pattern=args.include, exclude_pattern=args.exclude
+        )
     elif args.download:
         destination_path = validate_directory(args.download, "destination")
-        download_from_secrets_manager(destination_path)
+        download_from_secrets_manager(
+            destination_path, include_pattern=args.include, exclude_pattern=args.exclude
+        )
 
 
 if __name__ == "__main__":
