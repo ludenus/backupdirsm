@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write  # Ensure token has write permissions
+    env:
+      POETRY_HOME: /opt/poetry
+      POETRY_VERSION: 1.8.3
+
+    steps:
+    - uses: actions/checkout@v2
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+
+    - name: Update and install required packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-venv
+
+    - name: Set up Python environment
+      run: |
+        python3 -m venv $POETRY_HOME
+        $POETRY_HOME/bin/pip install poetry==$POETRY_VERSION
+        sudo ln -s $POETRY_HOME/bin/poetry /usr/local/bin/poetry
+        poetry --version
+        poetry env info
+
+    - name: Install poetry-dynamic-versioning plugin
+      run: |
+        poetry self add "poetry-dynamic-versioning"
+        poetry self show plugins
+
+    - name: Install dependencies and build your project
+      run: |
+        set -x
+        set -e
+        poetry run ./build.sh
+
+    - name: Publish to PyPI Test Repo
+      run: |
+        set -x
+        set -e
+        poetry run ./publish.sh
+      env:
+        PYPI_TOKEN: ${{ secrets.PYPI_TEST_TOKEN }}
+        PYPI_UPLOAD_URL: https://test.pypi.org/legacy/
+        PYPI_CHECK_URL: https://test.pypi.org/pypi/
+
+    - name: Publish to PyPI Main Repo
+      run: |
+        set -x
+        set -e
+        poetry run ./publish.sh
+      env:
+        PYPI_TOKEN: ${{ secrets.PYPI_MAIN_TOKEN }}
+        PYPI_UPLOAD_URL: https://upload.pypi.org/legacy/
+        PYPI_CHECK_URL: https://pypi.org/pypi/
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist/backupdirsm
+        asset_name: backupdirsm
+        asset_content_type: application/octet-stream

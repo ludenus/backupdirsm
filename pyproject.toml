@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "backupdirsm"
+version = "0.0.0" # This is a placeholder and will be replaced by the version from poetry-dynamic-versioning
+description = ""
+authors = ["Andrey Andreyev <x0153362@gmail.com>"]
+readme = "README.md"
+repository = "https://github.com/ludenus/backupdirsm"
+homepage = "https://github.com/ludenus/backupdirsm"
+documentation = "https://github.com/ludenus/backupdirsm"
+keywords = ["backup", "aws", "secrets", "secrets-manager", "restore"]
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux"
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+boto3 = "^1.35.18"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+dirty = false
+style = "pep440"
+vcs = "git"
+#pattern = "^(?P<base>[0-9]+\\.[0-9]+\\.[0-9]+)$"
+pattern = "default-unprefixed"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+backupdirsm = "backupdirsm.main:_main"

@@ -1,0 +1,16 @@
+/.idea/
+*.iml
+
+.vscode/
+
+**.DS_Store
+
+build/
+dist/
+
+*.spec
+requirements.txt
+*.log
+
+__pycache__/
+*.pyc
