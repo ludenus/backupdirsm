@@ -107,10 +107,10 @@ def upload_directory(directory, include_pattern=None, exclude_pattern=None):
 
             # Apply include and exclude patterns using regular expressions
             if include_pattern and not bool(re.search(include_pattern, file_path)):
-                logger.info(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
+                logger.debug(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
                 continue
             if exclude_pattern and bool(re.search(exclude_pattern, file_path)):
-                logger.info(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
+                logger.debug(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
                 continue
 
             try:
@@ -156,10 +156,10 @@ def download_from_secrets_manager(destination, include_pattern=None, exclude_pat
 
                 # Apply include and exclude patterns using regular expressions
                 if include_pattern and not bool(re.search(include_pattern, file_path)):
-                    logger.info(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
+                    logger.debug(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
                     continue
                 if exclude_pattern and bool(re.search(exclude_pattern, file_path)):
-                    logger.info(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
+                    logger.debug(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
                     continue
 
                 # Construct destination path
@@ -167,7 +167,7 @@ def download_from_secrets_manager(destination, include_pattern=None, exclude_pat
 
                 # Ensure that the destination path is within the destination directory
                 if not dest_path.startswith(destination):
-                    logger.error(
+                    logger.warning(
                         f"Destination path '{dest_path}' is outside the destination directory '{destination}'. Skipping."
                     )
                     continue
@@ -200,7 +200,7 @@ def main():
         "-d",
         "--download",
         type=str,
-        help="Destination directory to download from AWS Secrets Manager",
+        help="Destination directory where to download from AWS Secrets Manager",
     )
     parser.add_argument(
         "-i",
