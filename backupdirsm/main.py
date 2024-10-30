@@ -70,7 +70,6 @@ def validate_directory(path, mode="source"):
 
     return canonical_path
 
-
 def upload_to_secrets_manager(secret_name, secret_value, description=None, tags=None):
     client = get_secretsmanager()
 
@@ -106,10 +105,12 @@ def upload_directory(directory, include_pattern=None, exclude_pattern=None):
         for file_name in files:
             file_path = os.path.abspath(os.path.join(root, file_name))
 
-            # Apply include and exclude patterns
-            if include_pattern and not fnmatch.fnmatch(file_path, include_pattern):
+            # Apply include and exclude patterns using regular expressions
+            if include_pattern and not bool(re.search(include_pattern, file_path)):
+                logger.info(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
                 continue
-            if exclude_pattern and fnmatch.fnmatch(file_path, exclude_pattern):
+            if exclude_pattern and bool(re.search(exclude_pattern, file_path)):
+                logger.info(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
                 continue
 
             try:
@@ -128,9 +129,7 @@ def upload_directory(directory, include_pattern=None, exclude_pattern=None):
                 logger.error(f"Error uploading file '{file_path}': {e}")
 
 
-def download_from_secrets_manager(
-    destination, include_pattern=None, exclude_pattern=None
-):
+def download_from_secrets_manager(destination, include_pattern=None, exclude_pattern=None):
     client = get_secretsmanager()
     destination = os.path.abspath(os.path.realpath(destination))
     try:
@@ -155,10 +154,12 @@ def download_from_secrets_manager(
 
                 file_path = filename_tag
 
-                # Apply include and exclude patterns
-                if include_pattern and not fnmatch.fnmatch(file_path, include_pattern):
+                # Apply include and exclude patterns using regular expressions
+                if include_pattern and not bool(re.search(include_pattern, file_path)):
+                    logger.info(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
                     continue
-                if exclude_pattern and fnmatch.fnmatch(file_path, exclude_pattern):
+                if exclude_pattern and bool(re.search(exclude_pattern, file_path)):
+                    logger.info(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
                     continue
 
                 # Construct destination path
@@ -204,14 +205,14 @@ def main():
     parser.add_argument(
         "-i",
         "--include",
-        metavar="PATTERN",
-        help="Include only files matching the pattern",
+        metavar="REGEX",
+        help="Include only files matching the regex pattern",
     )
     parser.add_argument(
         "-e",
         "--exclude",
-        metavar="PATTERN",
-        help="Exclude files matching the pattern",
+        metavar="REGEX",
+        help="Exclude files matching the regex pattern",
     )
     args = parser.parse_args()
 
