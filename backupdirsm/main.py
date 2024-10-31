@@ -189,6 +189,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Upload or download directory contents to/from AWS Secrets Manager."
     )
+    parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {VERSION}")
+    
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "-u",

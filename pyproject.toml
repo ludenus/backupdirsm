@@ -27,9 +27,14 @@ vcs = "git"
 #pattern = "^(?P<base>[0-9]+\\.[0-9]+\\.[0-9]+)$"
 pattern = "default-unprefixed"
 
+[tool.poetry-dynamic-versioning.substitution]
+files = [ "*/main.py" ]
+patterns = ['''(^VERSION\s*=\s*['"])[^'"]*(['"])''']
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 backupdirsm = "backupdirsm.main:main"
+
