@@ -22,12 +22,13 @@ pip install backupdirsm
 
 ## Usage
 ```
-usage: backupdirsm [-h] (-u UPLOAD | -d DOWNLOAD) [-i REGEX] [-e REGEX]
+usage: backupdirsm [-h] [-v] (-u UPLOAD | -d DOWNLOAD) [-i REGEX] [-e REGEX] [-p PREFIX]
 
 Upload or download directory contents to/from AWS Secrets Manager.
 
 options:
   -h, --help            show this help message and exit
+  -v, --version         show program's version number and exit
   -u UPLOAD, --upload UPLOAD
                         Source directory to upload to AWS Secrets Manager
   -d DOWNLOAD, --download DOWNLOAD
@@ -36,6 +37,8 @@ options:
                         Include only files matching the regex pattern
   -e REGEX, --exclude REGEX
                         Exclude files matching the regex pattern
+  -p PREFIX, --prefix PREFIX
+                        Optional prefix to add to the secret name. Must match the pattern /^[a-zA-Z0-9_\/]*$/
 ```
 
 ## Examples
