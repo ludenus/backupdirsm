@@ -41,6 +41,12 @@ def get_iso8601_timestamp(time):
     dt = dt.astimezone()
     return dt.isoformat()
 
+def validate_prefix(prefix):
+    regex = r"^[a-zA-Z0-9_\/]*$"  # allow only letters, numbers, underscores, and forward slashes
+    pattern = re.compile(regex)
+    if not pattern.match(prefix):
+        logging.error(f"Prefix: '{prefix}' does not match pattern /{regex}/")
+        sys.exit(10)
 
 def validate_directory(path, mode="source"):
     try:
@@ -100,17 +106,17 @@ def upload_to_secrets_manager(secret_name, secret_value, description=None, tags=
             sys.exit(21)
 
 
-def upload_directory(directory, include_pattern=None, exclude_pattern=None):
+def upload_directory(directory, include_pattern=None, exclude_pattern=None, prefix=None):
     for root, _, files in os.walk(directory, followlinks=True):
         for file_name in files:
             file_path = os.path.abspath(os.path.join(root, file_name))
 
             # Apply include and exclude patterns using regular expressions
             if include_pattern and not bool(re.search(include_pattern, file_path)):
-                logger.debug(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
+                logger.debug(f"Skipping filename {file_path} because it does not match the include pattern: {include_pattern}")
                 continue
             if exclude_pattern and bool(re.search(exclude_pattern, file_path)):
-                logger.debug(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
+                logger.debug(f"Skipping filename {file_path} because it matches the exclude pattern: {exclude_pattern}")
                 continue
 
             try:
@@ -123,13 +129,18 @@ def upload_directory(directory, include_pattern=None, exclude_pattern=None):
                     {"Key": "hostname", "Value": _hostname},
                     {"Key": "lastmodified", "Value": last_modified_iso},
                 ]
+
                 secret_name = re.sub(r"[^a-zA-Z0-9_\/]", "_", file_path)
+
+                if prefix:
+                    secret_name = f"{prefix}{secret_name}"
+
                 upload_to_secrets_manager(secret_name, file_content, tags=tags)
             except Exception as e:
                 logger.error(f"Error uploading file '{file_path}': {e}")
 
 
-def download_from_secrets_manager(destination, include_pattern=None, exclude_pattern=None):
+def download_from_secrets_manager(destination, include_pattern=None, exclude_pattern=None, prefix=None):
     client = get_secretsmanager()
     destination = os.path.abspath(os.path.realpath(destination))
     try:
@@ -151,15 +162,22 @@ def download_from_secrets_manager(destination, include_pattern=None, exclude_pat
                 )
                 if not filename_tag:
                     continue
+                
+                # Check if the secret name matches the prefix
+                secret_name = secret["Name"]
+                expected_secret_name = re.sub(r"[^a-zA-Z0-9_\/]", "_", f"{prefix}{filename_tag}")
+                if prefix and expected_secret_name != secret_name :
+                    logger.debug(f"Skipping secret '{secret_name}' because prefix does not match.")
+                    continue
 
                 file_path = filename_tag
 
                 # Apply include and exclude patterns using regular expressions
                 if include_pattern and not bool(re.search(include_pattern, file_path)):
-                    logger.debug(f"Skipping {file_path} because it does not match the include pattern: {include_pattern}")
+                    logger.debug(f"Skipping filename {file_path} because it does not match the include pattern: {include_pattern}")
                     continue
                 if exclude_pattern and bool(re.search(exclude_pattern, file_path)):
-                    logger.debug(f"Skipping {file_path} because it matches the exclude pattern: {exclude_pattern}")
+                    logger.debug(f"Skipping filename {file_path} because it matches the exclude pattern: {exclude_pattern}")
                     continue
 
                 # Construct destination path
@@ -216,17 +234,25 @@ def main():
         metavar="REGEX",
         help="Exclude files matching the regex pattern",
     )
+    parser.add_argument(
+        "-p",
+        "--prefix",
+        help="Optional prefix to add to the secret name. Must match the pattern /^[a-zA-Z0-9_\/]*$/",
+    )
     args = parser.parse_args()
+
+    if args.prefix:
+        validate_prefix(args.prefix)
 
     if args.upload:
         source_path = validate_directory(args.upload, "source")
         upload_directory(
-            source_path, include_pattern=args.include, exclude_pattern=args.exclude
+            source_path, include_pattern=args.include, exclude_pattern=args.exclude, prefix=args.prefix
         )
     elif args.download:
         destination_path = validate_directory(args.download, "destination")
         download_from_secrets_manager(
-            destination_path, include_pattern=args.include, exclude_pattern=args.exclude
+            destination_path, include_pattern=args.include, exclude_pattern=args.exclude, prefix=args.prefix
         )
 
 
